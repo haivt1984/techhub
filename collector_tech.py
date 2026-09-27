@@ -8,8 +8,12 @@ import sys
 
 sys.stdout.reconfigure(line_buffering=True)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://lleeibzegmnycuingzgx.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZWVpYnplZ21ueWN1aW5nemd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjc5OTUsImV4cCI6MjEwNTcwMzk5NX0.KrO8Y8qoKh0NIPYDL6wki7zGb-Lxi1xwWgQrX9xSXxE")
+# Lấy biến môi trường an toàn, fallback về URL/Key nếu rỗng
+SUPABASE_URL = os.getenv("SUPABASE_URL") or "https://lleeibzegmnycuingzgx.supabase.co"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZWVpYnplZ21ueWN1aW5nemd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjc5OTUsImV4cCI6MjEwNTcwMzk5NX0.KrO8Y8qoKh0NIPYDL6wki7zGb-Lxi1xwWgQrX9xSXxE"
+
+if not SUPABASE_URL.startswith("http"):
+    raise ValueError(f"SUPABASE_URL không hợp lệ: '{SUPABASE_URL}'")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -17,12 +21,7 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-HTTP_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-}
-
-# Danh mục thiết bị thực tế cần cào & chuẩn hóa
+# Danh mục thiết bị chuẩn hóa
 TECH_TARGETS = [
     {
         "name": "iPhone 15 Pro Max 256GB Titan Tự Nhiên",
@@ -121,11 +120,11 @@ TECH_TARGETS = [
         """,
         "offers": [
             { "store_name": "CellphoneS", "price": 16990000, "original_price": 20490000, "promotion_gift": "Balo Gaming + Chuột", "product_url": "https://cellphones.com.vn/" },
-            { "store_name": "Phong Vũ", "price: ": 17490000, "original_price": 20990000, "promotion_gift": "Bảo hành 24 tháng chính hãng", "product_url": "https://phongvu.vn/" },
+            { "store_name": "Phong Vũ", "price": 17490000, "original_price": 20990000, "promotion_gift": "Bảo hành 24 tháng chính hãng", "product_url": "https://phongvu.vn/" },
             { "store_name": "FPT Shop", "price": 17990000, "original_price": 21490000, "promotion_gift": "Giảm 300k qua VNPAY", "product_url": "https://fptshop.com.vn/" }
         ]
-      },
-      {
+    },
+    {
         "name": "Apple MacBook Air 13 inch M2 8GB / 256GB SSD Bạc Ánh Sao",
         "brand": "Apple",
         "category": "laptop",
@@ -175,7 +174,8 @@ def sync_collector():
         prod_name = item["name"]
         print(f"\n[*] Đang xử lý: {prod_name}")
 
-        prices = [o["price"] for o in item["offers"]]
+        # Lấy giá an toàn bằng .get('price', 0)
+        prices = [o.get("price", 0) for o in item.get("offers", []) if o.get("price")]
         min_p = min(prices) if prices else 0
 
         existing_id = check_product_exists(prod_name)
@@ -217,22 +217,22 @@ def sync_collector():
             print(f"    ✔ Tạo mới sản phẩm (ID: {prod_id}, Min Price: {min_p:,} đ)")
 
         # Cập nhật danh sách nơi bán
-        for offer in item["offers"]:
+        for offer in item.get("offers", []):
             offer_payload = {
                 "product_id": prod_id,
-                "store_name": offer["store_name"],
-                "price": offer["price"],
+                "store_name": offer.get("store_name", "Shop"),
+                "price": offer.get("price", 0),
                 "original_price": offer.get("original_price"),
-                "product_url": offer["product_url"],
+                "product_url": offer.get("product_url", "#"),
                 "promotion_gift": offer.get("promotion_gift", "")
             }
             requests.post(f"{SUPABASE_URL}/rest/v1/product_offers", headers=HEADERS, json=offer_payload)
-            print(f"       -> Shop: {offer['store_name']:<18} | Giá: {offer['price']:,} đ")
+            print(f"       -> Shop: {offer.get('store_name', ''):<18} | Giá: {offer.get('price', 0):,} đ")
 
         total_synced += 1
         time.sleep(0.5)
 
-    print(f"\n=== HOÀN TẤT! ĐÃ ĐỒNG BỘ THÀNH CÔNG {total_synced} SẢN PHẨM VÀ GIÁ ĐẠI LÝ LÊN SUPABASE ===")
+    print(f"\n=== HOÀN TẤT! ĐÃ ĐỒNG BỘ THÀNH CÔNG {total_synced} SẢN PHẨM VÀO SUPABASE ===")
 
 if __name__ == "__main__":
     sync_collector()
