@@ -1,51 +1,895 @@
-// Thay thế đoạn TECH_PRODUCTS cố định bằng hàm gọi API Supabase
-const SUPABASE_URL = "https://lleeibzegmnycuingzgx.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZWVpYnplZ21ueWN1aW5nemd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjc5OTUsImV4cCI6MjEwNTcwMzk5NX0.KrO8Y8qoKh0NIPYDL6wki7zGb-Lxi1xwWgQrX9xSXxE";
-const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TechCompare &bull; Nền Tảng Đối Soát Giá, Lọc Cấu Hình & Đánh Giá Đồ Công Nghệ</title>
 
-let TECH_PRODUCTS = [];
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS Client v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-async function fetchOnlineData() {
-  try {
-    const { data, error } = await client
-      .from('tech_products')
-      .select('*, product_offers(*)');
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 
-    if (!error && data && data.length > 0) {
-      TECH_PRODUCTS = data.map(item => ({
-        id: item.id,
-        category: item.category,
-        brand: item.brand,
-        name: item.name,
-        ram: item.ram,
-        storage: item.storage,
-        color: item.color,
-        is_flash: item.is_flash,
-        sold: item.sold_count,
-        total: item.total_stock,
-        image: item.image_url,
-        thumbnails: item.thumbnails || [item.image_url],
-        pros: item.pros || [],
-        cons: item.cons || [],
-        article: item.article_html || '',
-        specs: item.specs || {},
-        offers: (item.product_offers || []).map(o => ({
-          store: o.store_name,
-          price: o.price,
-          orig: o.original_price || o.price,
-          gift: o.promotion_gift || 'Chính hãng',
-          url: o.product_url
-        }))
-      }));
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          colors: {
+            cps: {
+              red: '#d70018',
+              darkRed: '#a80013',
+              lightRed: '#fef2f2',
+              gray: '#f4f6f8'
+            }
+          }
+        }
+      }
     }
-  } catch (e) {
-    console.error("Lỗi lấy dữ liệu Supabase:", e);
-  }
-}
+  </script>
 
-async function initPage() {
-  await fetchOnlineData();
-  renderFlashSale();
-  renderProducts();
-  startCountdown();
-}
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    /* Typography bài đánh giá chuyên sâu */
+    .article-body h2 { font-size: 1.25rem; font-weight: 800; margin-top: 1.5rem; margin-bottom: 0.6rem; color: #0f172a; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem; }
+    .article-body h2::before { content: ""; display: inline-block; width: 4px; height: 1.25rem; background-color: #d70018; border-radius: 2px; }
+    .article-body h3 { font-size: 1.05rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: 0.5rem; color: #1e293b; }
+    .article-body p { margin-bottom: 0.9rem; line-height: 1.8; color: #334155; font-size: 0.925rem; text-align: justify; }
+    .article-body figure { margin: 1.25rem 0; text-align: center; }
+    .article-body figure img { border-radius: 1rem; width: 100%; object-fit: cover; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); border: 1px solid #e2e8f0; }
+    .article-body figcaption { font-size: 0.75rem; color: #64748b; font-family: 'JetBrains Mono', monospace; margin-top: 0.4rem; font-style: italic; }
+
+    .content-collapsed {
+      max-height: 520px;
+      overflow: hidden;
+      position: relative;
+    }
+    .content-collapsed::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 140px;
+      background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.95), white);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="bg-[#f4f6f8] text-slate-800 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- ================= TOP HEADER ================= -->
+  <header class="bg-cps-red text-white sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 cursor-pointer select-none shrink-0" onclick="showCatalogView()">
+        <div class="w-10 h-10 rounded-2xl bg-white text-cps-red flex items-center justify-center font-black text-2xl shadow-sm">T</div>
+        <div>
+          <div class="font-black text-xl tracking-tight leading-none text-white">tech<span class="text-amber-300">compare</span></div>
+          <span class="text-[9px] text-red-100 font-mono tracking-widest uppercase">Bộ Lọc Giá & Cấu Hình</span>
+        </div>
+      </div>
+
+      <div class="flex-grow max-w-2xl relative text-slate-800 hidden sm:block">
+        <input 
+          type="text" 
+          id="search-input"
+          placeholder="Tìm sản phẩm, cấu hình (RAM 16GB, RTX 4070, Màu Titan, iPhone...)" 
+          class="w-full bg-white rounded-xl pl-10 pr-4 py-2 text-xs focus:outline-none shadow-sm placeholder:text-slate-400"
+          oninput="handleSearchInput()"
+        />
+        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+
+      <div class="flex items-center gap-2.5 shrink-0">
+        <button id="btn-floating-compare" onclick="openDirectCompareModal()" class="hidden px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs shadow-sm transition items-center gap-1.5 animate-bounce">
+          <span>⚖ So sánh (<span id="compare-counter">0</span>)</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= GIAO DIỆN 1: MÀN HÌNH CHÍNH ================= -->
+  <main id="catalog-view" class="max-w-7xl mx-auto px-3 sm:px-6 py-4 flex-grow w-full space-y-6">
+
+    <!-- KHỐI HERO: MENU DỌC + SLIDER + BÀI PHỤ -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+      <aside class="lg:col-span-3 bg-white rounded-2xl p-2 shadow-xs border border-slate-200 flex flex-col justify-between text-xs font-semibold text-slate-700">
+        <div class="space-y-0.5">
+          <button onclick="filterCategory('ALL')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 hover:text-cps-red transition flex items-center justify-between group active-cat" data-cat="ALL">
+            <span class="flex items-center gap-2.5"><span>🌐</span> Tất cả danh mục</span>
+            <span class="text-slate-300 group-hover:text-cps-red">&rsaquo;</span>
+          </button>
+          <button onclick="filterCategory('phone')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 hover:text-cps-red transition flex items-center justify-between group" data-cat="phone">
+            <span class="flex items-center gap-2.5"><span>📱</span> Điện thoại & Tablet</span>
+            <span class="text-slate-300 group-hover:text-cps-red">&rsaquo;</span>
+          </button>
+          <button onclick="filterCategory('laptop')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 hover:text-cps-red transition flex items-center justify-between group" data-cat="laptop">
+            <span class="flex items-center gap-2.5"><span>💻</span> Laptop & MacBook</span>
+            <span class="text-slate-300 group-hover:text-cps-red">&rsaquo;</span>
+          </button>
+          <button onclick="filterCategory('pc_part')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 hover:text-cps-red transition flex items-center justify-between group" data-cat="pc_part">
+            <span class="flex items-center gap-2.5"><span>⚡</span> Linh kiện (VGA, CPU, RAM)</span>
+            <span class="text-slate-300 group-hover:text-cps-red">&rsaquo;</span>
+          </button>
+          <button onclick="filterCategory('gear_storage')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 hover:text-cps-red transition flex items-center justify-between group" data-cat="gear_storage">
+            <span class="flex items-center gap-2.5"><span>⌨️</span> Chuột, Phím & USB</span>
+            <span class="text-slate-300 group-hover:text-cps-red">&rsaquo;</span>
+          </button>
+        </div>
+        <div class="p-2 border-t border-slate-100 text-[11px] text-slate-400 font-mono flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Dữ liệu giá quét trực tiếp</span>
+        </div>
+      </aside>
+
+      <div class="lg:col-span-6 bg-white rounded-2xl overflow-hidden shadow-xs border border-slate-200 relative flex flex-col justify-between group cursor-pointer" onclick="openHeroHighlight()">
+        <div class="w-full h-full relative aspect-[16/9] lg:aspect-auto">
+          <img id="hero-slider-img" src="https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1200&q=80" alt="Review" class="w-full h-full object-cover">
+          <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-end p-5 text-white">
+            <span class="px-2.5 py-0.5 rounded text-[10px] font-bold font-mono bg-cps-red w-max mb-1.5 uppercase">BÀI ĐÁNH GIÁ TIÊU ĐIỂM</span>
+            <h2 id="hero-slider-title" class="font-extrabold text-base sm:text-lg leading-snug line-clamp-2">iPhone 15 Pro Max: Trải nghiệm thực tế sau 6 tháng sử dụng khung viền Titan</h2>
+            <p id="hero-slider-desc" class="text-xs text-slate-200 line-clamp-2 mt-1">Đánh giá camera zoom 5x, thời lượng pin thực tế và độ bền chất liệu mới.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-3 flex flex-col gap-3 justify-between" id="side-articles-container">
+        <!-- Render 2 bài phụ -->
+      </div>
+    </section>
+
+    <!-- KHỐI FLASH SALE CELLPHONES -->
+    <section class="rounded-3xl bg-gradient-to-r from-red-600 via-cps-red to-orange-600 p-4 text-white shadow-md">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/20 pb-3 mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="px-3 py-1 bg-amber-300 text-slate-900 font-black rounded-xl text-xs uppercase tracking-wider flex items-center gap-1.5">
+            <span>⚡</span> FLASH SALE GIÁ SỐC
+          </div>
+          <span class="text-xs text-red-100 hidden sm:inline">Phát hiện giá rẻ nhất các hệ thống</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono text-red-100">KẾT THÚC TRONG:</span>
+          <div class="flex items-center gap-1 font-mono font-bold text-xs">
+            <span id="countdown-hours" class="bg-black/60 px-2 py-1 rounded text-amber-300">02</span>:
+            <span id="countdown-mins" class="bg-black/60 px-2 py-1 rounded text-amber-300">45</span>:
+            <span id="countdown-secs" class="bg-black/60 px-2 py-1 rounded text-amber-300">18</span>
+          </div>
+        </div>
+      </div>
+      <div id="flash-sale-container" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5"></div>
+    </section>
+
+    <!-- ================= KHỐI BỘ LỌC ĐA CHIỀU ================= -->
+    <section class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-xs sm:text-sm text-slate-900 uppercase font-mono flex items-center gap-2">
+          <span>🎯</span> BỘ LỌC TÌM KIẾM THEO NHU CẦU & CẤU HÌNH
+        </h3>
+        <button onclick="resetAllFilters()" class="text-xs text-cps-red hover:underline font-semibold font-mono">
+          ✕ Xóa tất cả lọc
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        
+        <!-- 1. Lọc theo Giá tiền -->
+        <div class="space-y-1.5">
+          <span class="font-bold text-slate-500 uppercase font-mono text-[10px] block">1. KHOẢNG GIÁ:</span>
+          <div class="flex flex-wrap gap-1.5" id="price-filters">
+            <button onclick="setFilter('price', 'ALL')" class="filter-btn active px-2.5 py-1 rounded-lg border border-cps-red bg-red-50 text-cps-red font-bold transition" data-type="price" data-val="ALL">Tất cả</button>
+            <button onclick="setFilter('price', 'under_5')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="price" data-val="under_5">&lt; 5 triệu</button>
+            <button onclick="setFilter('price', '5_15')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="price" data-val="5_15">5 - 15 triệu</button>
+            <button onclick="setFilter('price', '15_25')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="price" data-val="15_25">15 - 25 triệu</button>
+            <button onclick="setFilter('price', 'over_25')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="price" data-val="over_25">&gt; 25 triệu</button>
+          </div>
+        </div>
+
+        <!-- 2. Lọc theo RAM -->
+        <div class="space-y-1.5">
+          <span class="font-bold text-slate-500 uppercase font-mono text-[10px] block">2. DUNG LƯỢNG RAM:</span>
+          <div class="flex flex-wrap gap-1.5" id="ram-filters">
+            <button onclick="setFilter('ram', 'ALL')" class="filter-btn active px-2.5 py-1 rounded-lg border border-cps-red bg-red-50 text-cps-red font-bold transition" data-type="ram" data-val="ALL">Tất cả</button>
+            <button onclick="setFilter('ram', '8GB')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="ram" data-val="8GB">8GB</button>
+            <button onclick="setFilter('ram', '12GB')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="ram" data-val="12GB">12GB</button>
+            <button onclick="setFilter('ram', '16GB')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="ram" data-val="16GB">16GB</button>
+          </div>
+        </div>
+
+        <!-- 3. Lọc theo Ổ cứng / Bộ nhớ -->
+        <div class="space-y-1.5">
+          <span class="font-bold text-slate-500 uppercase font-mono text-[10px] block">3. BỘ NHỚ LƯU TRỮ:</span>
+          <div class="flex flex-wrap gap-1.5" id="storage-filters">
+            <button onclick="setFilter('storage', 'ALL')" class="filter-btn active px-2.5 py-1 rounded-lg border border-cps-red bg-red-50 text-cps-red font-bold transition" data-type="storage" data-val="ALL">Tất cả</button>
+            <button onclick="setFilter('storage', '128GB')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="storage" data-val="128GB">128GB</button>
+            <button onclick="setFilter('storage', '256GB')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="storage" data-val="256GB">256GB</button>
+            <button onclick="setFilter('storage', '512GB')" class="filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700" data-type="storage" data-val="512GB">512GB SSD</button>
+          </div>
+        </div>
+
+        <!-- 4. Lọc theo Màu Sắc -->
+        <div class="space-y-1.5">
+          <span class="font-bold text-slate-500 uppercase font-mono text-[10px] block">4. TÔNG MÀU SẮC:</span>
+          <div class="flex flex-wrap items-center gap-2" id="color-filters">
+            <button onclick="setFilter('color', 'ALL')" class="filter-btn active px-2.5 py-1 rounded-lg border border-cps-red bg-red-50 text-cps-red font-bold transition" data-type="color" data-val="ALL">Tất cả</button>
+            
+            <button onclick="setFilter('color', 'Titan')" class="filter-btn p-1 rounded-lg border border-slate-200 hover:border-cps-red flex items-center gap-1 transition text-slate-700" data-type="color" data-val="Titan" title="Titan Tự Nhiên">
+              <span class="w-3.5 h-3.5 rounded-full bg-[#9c9489] inline-block border"></span>
+              <span class="text-[11px] pr-1">Titan</span>
+            </button>
+
+            <button onclick="setFilter('color', 'Black')" class="filter-btn p-1 rounded-lg border border-slate-200 hover:border-cps-red flex items-center gap-1 transition text-slate-700" data-type="color" data-val="Black" title="Đen / Xám Nhạt">
+              <span class="w-3.5 h-3.5 rounded-full bg-[#1e293b] inline-block border"></span>
+              <span class="text-[11px] pr-1">Đen</span>
+            </button>
+
+            <button onclick="setFilter('color', 'Silver')" class="filter-btn p-1 rounded-lg border border-slate-200 hover:border-cps-red flex items-center gap-1 transition text-slate-700" data-type="color" data-val="Silver" title="Bạc / Trắng">
+              <span class="w-3.5 h-3.5 rounded-full bg-[#e2e8f0] inline-block border"></span>
+              <span class="text-[11px] pr-1">Bạc</span>
+            </button>
+
+            <button onclick="setFilter('color', 'Gold')" class="filter-btn p-1 rounded-lg border border-slate-200 hover:border-cps-red flex items-center gap-1 transition text-slate-700" data-type="color" data-val="Gold" title="Vàng / Gold">
+              <span class="w-3.5 h-3.5 rounded-full bg-[#fde047] inline-block border"></span>
+              <span class="text-[11px] pr-1">Vàng</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Dải Tags Đang Chọn -->
+      <div id="active-filter-tags" class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs font-mono">
+        <span class="text-slate-400">Đang lọc:</span>
+        <span class="text-slate-500 italic">Mặc định (Hiển thị toàn bộ)</span>
+      </div>
+    </section>
+
+    <!-- GRID SẢN PHẨM CHÍNH -->
+    <section class="space-y-3.5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <h3 id="catalog-title" class="font-bold text-sm sm:text-base text-slate-900 uppercase font-mono">Danh Sách Thiết Bị Phù Hợp</h3>
+          <span id="product-total-badge" class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-xs font-mono font-semibold">0 thiết bị</span>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-slate-400 font-mono hidden sm:inline">Ưu tiên:</span>
+          <select id="sort-select" onchange="changeSortOrder(this.value)" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-700 font-medium focus:outline-none shadow-xs">
+            <option value="cheap_first">Giá thấp đến cao</option>
+            <option value="expensive_first">Giá cao xuống thấp</option>
+            <option value="discount_desc">Mức giảm giá sâu nhất</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="product-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4"></div>
+    </section>
+
+  </main>
+
+  <!-- ================= GIAO DIỆN 2: CHI TIẾT SẢN PHẨM & BÀI ĐÁNH GIÁ CHUYÊN SÂU ================= -->
+  <main id="product-detail-view" class="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex-grow w-full hidden">
+    
+    <div class="flex items-center justify-between mb-4">
+      <button onclick="showCatalogView()" class="group inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-bold transition shadow-xs">
+        <span class="group-hover:-translate-x-1 transition duration-200">&larr;</span> Quay lại danh sách
+      </button>
+      <div class="text-[11px] font-mono text-slate-400">
+        Trang chủ / <span id="breadcrumb-category" class="text-slate-700 font-semibold"></span> / <span id="breadcrumb-name" class="text-cps-red font-semibold"></span>
+      </div>
+    </div>
+
+    <!-- KHỐI 1: TỔNG QUAN, BẢNG ĐỐI SOÁT GIÁ CÁC ĐẠI LÝ -->
+    <div class="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs mb-8">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+        
+        <div class="md:col-span-5">
+          <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-xs border border-slate-200 bg-slate-50 relative mb-3">
+            <img id="detail-img" src="" alt="Cover" class="w-full h-full object-cover">
+            <span id="detail-brand-badge" class="absolute top-3 left-3 px-2.5 py-1 rounded-md text-[11px] font-bold font-mono bg-slate-900 text-white uppercase"></span>
+          </div>
+          <div class="grid grid-cols-4 gap-2" id="detail-thumbnails"></div>
+        </div>
+
+        <div class="md:col-span-7 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span id="detail-category-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-50 text-cps-red border border-red-200"></span>
+              <span class="text-xs text-emerald-600 font-semibold font-mono">● Đang sẵn hàng tại các chuỗi đại lý</span>
+            </div>
+
+            <h1 id="detail-title" class="text-xl sm:text-2xl font-bold text-slate-900 leading-snug mb-3"></h1>
+            
+            <div class="bg-red-50/70 p-4 rounded-2xl border border-red-100 mb-6 flex items-baseline justify-between">
+              <div>
+                <span class="text-[11px] uppercase font-mono text-cps-red block font-bold">GIÁ RẺ NHẤT TÌM THẤY</span>
+                <span id="detail-min-price" class="text-2xl sm:text-3xl font-extrabold text-cps-red font-mono"></span>
+              </div>
+              <div class="text-right">
+                <span class="text-xs text-slate-400 font-mono">Giá niêm yết:</span>
+                <span id="detail-orig-price" class="text-sm line-through text-slate-400 font-mono block"></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono mb-3">ĐỐI SOÁT GIÁ CỦA CÁC ĐẠI LÝ LỚN</h4>
+            <div id="detail-stores-list" class="space-y-2.5"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- KHỐI 2: BÀI VIẾT ĐÁNH GIÁ THỰC TẾ & BẢNG THÔNG SỐ STICKY -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      <!-- CỘT TRÁI (8/12): BÀI VIẾT REVIEW ĐÁNH GIÁ CHI TIẾT THỰC TẾ -->
+      <div class="lg:col-span-8 bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
+          <h2 class="font-extrabold text-lg text-slate-900 flex items-center gap-2">
+            <span>📖</span> ĐÁNH GIÁ CHI TIẾT SẢN PHẨM TỪ CHUYÊN GIA
+          </h2>
+          <span class="text-[11px] font-mono text-slate-400">Trải nghiệm thực tế</span>
+        </div>
+
+        <!-- Khung Pros & Cons -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 mb-6 text-xs" id="detail-pros-cons"></div>
+
+        <!-- Vùng Bài Viết (Thu gọn / Xem thêm) -->
+        <div id="article-wrapper" class="content-collapsed transition-all duration-300">
+          <div id="detail-article-content" class="article-body"></div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-100 text-center">
+          <button id="btn-toggle-article" onclick="toggleArticleLength()" class="px-6 py-2.5 rounded-full bg-red-50 hover:bg-red-100 text-cps-red font-bold text-xs font-mono transition inline-flex items-center gap-2 shadow-xs">
+            <span>Đọc tiếp toàn bộ bài đánh giá</span>
+            <span>&darr;</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- CỘT PHẢI (4/12): BẢNG THÔNG SỐ STICKY -->
+      <div class="lg:col-span-4 bg-white rounded-3xl border border-slate-200 p-6 shadow-xs sticky top-16">
+        <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider font-mono flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-900"></span>
+          THÔNG SỐ KỸ THUẬT CHI TIẾT
+        </h3>
+        <div id="detail-full-specs-table" class="divide-y divide-slate-100 text-xs font-mono"></div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ================= POPUP SO SÁNH 2 MÁY ================= -->
+  <div id="direct-compare-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 shrink-0">
+        <h3 class="font-bold text-base text-slate-900 font-mono uppercase">Đối Chiếu Trực Tiếp Cấu Hình & Giá</h3>
+        <button onclick="closeDirectCompareModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
+      </div>
+      <div id="compare-table-content" class="overflow-y-auto custom-scroll"></div>
+    </div>
+  </div>
+
+  <footer class="bg-white border-t border-slate-200 py-6 text-xs text-slate-400 text-center font-mono mt-auto">
+    TechCompare &bull; Nền Tảng Đối Soát Giá, Lọc Cấu Hình & Đánh Giá Đồ Công Nghệ Toàn Diện
+  </footer>
+
+  <!-- ================= KỊCH BẢN KẾT NỐI SUPABASE & ĐIỀU KHIỂN GIAO DIỆN ================= -->
+  <script>
+    // 1. Cấu hình Supabase Client
+    const SUPABASE_URL = "https://lleeibzegmnycuingzgx.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZWVpYnplZ21ueWN1aW5nemd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjc5OTUsImV4cCI6MjEwNTcwMzk5NX0.KrO8Y8qoKh0NIPYDL6wki7zGb-Lxi1xwWgQrX9xSXxE";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 2. Dữ liệu mặc định dự phòng (Fallback nếu DB trống)
+    const FALLBACK_PRODUCTS = [
+      {
+        id: 201, category: "phone", brand: "Apple", is_flash: true, sold: 88, total: 100,
+        ram: "8GB", storage: "256GB", color: "Titan",
+        name: "iPhone 15 Pro Max 256GB Titan Tự Nhiên",
+        image: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80",
+        thumbnails: ["https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=300&q=80"],
+        pros: ["Khung viền Titan nhẹ hơn 19g", "Camera tiềm vọng 5x cực nét", "Cổng Type-C 10Gbps"],
+        cons: ["Tốc độ sạc dừng ở mức 27W", "Giá cao cấp"],
+        article: `<h2>1. Thiết kế khung viền Titan</h2><p>Trọng lượng máy nhẹ hơn rõ rệt nhờ khung Titan, cầm không bị cấn tay.</p>`,
+        specs: { "Màn hình": "6.7 inch OLED 120Hz", "CPU": "Apple A17 Pro (3nm)", "RAM": "8GB", "Bộ nhớ": "256GB" },
+        offers: [
+          { store: "Hoàng Hà Mobile", price: 28890000, orig: 34990000, gift: "Chính hãng Apple VN/A", url: "https://hoanghamobile.com/" },
+          { store: "CellphoneS", price: 29290000, orig: 34990000, gift: "Tặng gói rơi vỡ 12 tháng", url: "https://cellphones.com.vn/" }
+        ]
+      },
+      {
+        id: 101, category: "laptop", brand: "Asus", is_flash: true, sold: 42, total: 50,
+        ram: "16GB", storage: "512GB", color: "Black",
+        name: "Asus TUF Gaming A15 FA506NC (Ryzen 5 7535HS / 16GB / RTX 3050)",
+        image: "https://images.unsplash.com/photo-1603302576837-37561b2e2302?auto=format&fit=crop&w=800&q=80",
+        thumbnails: ["https://images.unsplash.com/photo-1603302576837-37561b2e2302?auto=format&fit=crop&w=300&q=80"],
+        pros: ["Giá tốt phân khúc gaming", "Độ bền chuẩn quân sự", "16GB RAM DDR5"],
+        cons: ["Màu màn hình ở mức cơ bản 62.5% sRGB"],
+        article: `<h2>1. Độ bền chuẩn quân sự</h2><p>Vỏ máy chắc chắn, tản nhiệt quạt kép 84 cánh mát mẻ.</p>`,
+        specs: { "CPU": "Ryzen 5 7535HS", "RAM": "16GB DDR5", "Ổ cứng": "512GB SSD", "VGA": "RTX 3050 4GB" },
+        offers: [
+          { store: "CellphoneS", price: 16990000, orig: 20490000, gift: "Balo Gaming + Chuột", url: "https://cellphones.com.vn/" },
+          { store: "FPT Shop", price: 17990000, orig: 21490000, gift: "Giảm 300k VNPAY", url: "https://fptshop.com.vn/" }
+        ]
+      },
+      {
+        id: 102, category: "laptop", brand: "Apple", is_flash: false,
+        ram: "8GB", storage: "256GB", color: "Silver",
+        name: "Apple MacBook Air 13 inch M2 8GB / 256GB SSD Bạc Ánh Sao",
+        image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80",
+        thumbnails: ["https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=300&q=80"],
+        pros: ["Mỏng nhẹ 11.3mm, nặng 1.24kg", "Không quạt êm ái 100%", "Pin 18 tiếng"],
+        cons: ["8GB RAM không thể nâng cấp"],
+        article: `<h2>1. Mỏng nhẹ và yên tĩnh tuyệt đối</h2><p>Chip M2 tối ưu điện năng vượt trội, màn hình Retina sắc nét.</p>`,
+        specs: { "CPU": "Apple M2", "RAM": "8GB Unified", "Ổ cứng": "256GB SSD", "Màn hình": "13.6 inch Liquid Retina" },
+        offers: [
+          { store: "CellphoneS", price: 23490000, orig: 26490000, gift: "Thu cũ trợ giá 1 triệu", url: "https://cellphones.com.vn/" }
+        ]
+      }
+    ];
+
+    let TECH_PRODUCTS = [];
+    let currentCategory = 'ALL';
+    let filterState = {
+      price: 'ALL',
+      ram: 'ALL',
+      storage: 'ALL',
+      color: 'ALL'
+    };
+    let currentSort = 'cheap_first';
+    let isArticleExpanded = false;
+    let compareQueue = [];
+
+    // 3. Hàm gọi API Supabase tải dữ liệu trực tuyến
+    async function fetchOnlineData() {
+      try {
+        const { data, error } = await client
+          .from('tech_products')
+          .select('*, product_offers(*)');
+
+        if (!error && data && data.length > 0) {
+          TECH_PRODUCTS = data.map(item => ({
+            id: item.id,
+            category: item.category,
+            brand: item.brand,
+            name: item.name,
+            ram: item.ram || 'N/A',
+            storage: item.storage || 'N/A',
+            color: item.color || 'Black',
+            is_flash: item.is_flash,
+            sold: item.sold_count || 0,
+            total: item.total_stock || 100,
+            image: item.image_url,
+            thumbnails: item.thumbnails || [item.image_url],
+            pros: item.pros || [],
+            cons: item.cons || [],
+            article: item.article_html || item.article || '',
+            specs: item.specs || {},
+            offers: (item.product_offers || []).map(o => ({
+              store: o.store_name,
+              price: o.price,
+              orig: o.original_price || o.price,
+              gift: o.promotion_gift || 'Chính hãng',
+              url: o.product_url
+            }))
+          }));
+          console.log(`✔ Đã đồng bộ thành công ${TECH_PRODUCTS.length} sản phẩm từ Supabase.`);
+        } else {
+          console.warn("Chưa có dữ liệu từ Supabase hoặc lỗi, sử dụng dữ liệu dự phòng.");
+          TECH_PRODUCTS = FALLBACK_PRODUCTS;
+        }
+      } catch (e) {
+        console.error("Lỗi lấy dữ liệu Supabase:", e);
+        TECH_PRODUCTS = FALLBACK_PRODUCTS;
+      }
+    }
+
+    function formatVND(n) {
+      return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n);
+    }
+
+    // 4. Khởi chạy trang web
+    async function initPage() {
+      await fetchOnlineData();
+      renderHeroSideReviews();
+      renderFlashSale();
+      renderProducts();
+      startCountdown();
+    }
+
+    function renderHeroSideReviews() {
+      const container = document.getElementById('side-articles-container');
+      const sideItems = TECH_PRODUCTS.slice(1, 3);
+      container.innerHTML = sideItems.map(item => `
+        <div onclick="openProductDetail(${item.id})" class="flex-1 bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xs hover:shadow-md transition p-3 cursor-pointer flex flex-col justify-between group">
+          <div class="flex gap-2.5 items-start">
+            <img src="${item.image}" class="w-20 h-16 rounded-xl object-cover shrink-0 border group-hover:scale-105 transition">
+            <h4 class="font-bold text-xs text-slate-900 leading-snug line-clamp-2 group-hover:text-cps-red">${item.name}</h4>
+          </div>
+          <div class="text-[10px] font-mono text-slate-400 pt-2 border-t mt-2 flex justify-between">
+            <span>Review chi tiết</span>
+            <span class="text-cps-red font-bold">Xem bài &rarr;</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openHeroHighlight() {
+      if (TECH_PRODUCTS.length > 0) {
+        openProductDetail(TECH_PRODUCTS[0].id);
+      }
+    }
+
+    // ================= BỘ LỌC ĐA CHIỀU =================
+    function setFilter(type, value) {
+      filterState[type] = value;
+
+      document.querySelectorAll(`.filter-btn[data-type="${type}"]`).forEach(btn => {
+        if (btn.getAttribute('data-val') === value) {
+          btn.className = "filter-btn active px-2.5 py-1 rounded-lg border border-cps-red bg-red-50 text-cps-red font-bold transition";
+        } else {
+          btn.className = "filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700";
+        }
+      });
+
+      renderActiveFilterTags();
+      renderProducts();
+    }
+
+    function resetAllFilters() {
+      filterState = { price: 'ALL', ram: 'ALL', storage: 'ALL', color: 'ALL' };
+      currentCategory = 'ALL';
+      document.getElementById('search-input').value = '';
+
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        if (btn.getAttribute('data-val') === 'ALL') {
+          btn.className = "filter-btn active px-2.5 py-1 rounded-lg border border-cps-red bg-red-50 text-cps-red font-bold transition";
+        } else {
+          btn.className = "filter-btn px-2.5 py-1 rounded-lg border border-slate-200 hover:border-cps-red font-medium transition text-slate-700";
+        }
+      });
+
+      document.querySelectorAll('aside button').forEach(b => b.classList.remove('bg-red-50', 'text-cps-red', 'font-bold'));
+      const allCatBtn = document.querySelector(`aside button[data-cat="ALL"]`);
+      if (allCatBtn) allCatBtn.classList.add('bg-red-50', 'text-cps-red', 'font-bold');
+
+      renderActiveFilterTags();
+      renderProducts();
+    }
+
+    function renderActiveFilterTags() {
+      const container = document.getElementById('active-filter-tags');
+      const activeKeys = Object.entries(filterState).filter(([_, val]) => val !== 'ALL');
+
+      if (activeKeys.length === 0) {
+        container.innerHTML = `<span class="text-slate-400">Đang lọc:</span> <span class="text-slate-500 italic">Mặc định (Hiển thị toàn bộ)</span>`;
+        return;
+      }
+
+      const labels = { price: 'Giá', ram: 'RAM', storage: 'Bộ nhớ', color: 'Màu' };
+      container.innerHTML = `<span class="text-slate-400">Đang lọc:</span>` + activeKeys.map(([k, val]) => `
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-100 text-cps-red font-bold text-[11px]">
+          ${labels[k]}: ${val}
+          <button onclick="setFilter('${k}', 'ALL')" class="hover:text-black font-black">✕</button>
+        </span>
+      `).join('');
+    }
+
+    function renderProducts() {
+      const grid = document.getElementById('product-grid');
+      const searchTxt = document.getElementById('search-input')?.value.toLowerCase().trim() || '';
+
+      let list = TECH_PRODUCTS.filter(p => {
+        const prices = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.price) : [0];
+        const minP = Math.min(...prices);
+
+        const matchCat = (currentCategory === 'ALL') || (p.category === currentCategory);
+
+        let matchPrice = true;
+        if (filterState.price === 'under_5') matchPrice = (minP < 5000000);
+        else if (filterState.price === '5_15') matchPrice = (minP >= 5000000 && minP <= 15000000);
+        else if (filterState.price === '15_25') matchPrice = (minP > 15000000 && minP <= 25000000);
+        else if (filterState.price === 'over_25') matchPrice = (minP > 25000000);
+
+        const matchRAM = (filterState.ram === 'ALL') || (p.ram === filterState.ram);
+        const matchStorage = (filterState.storage === 'ALL') || (p.storage === filterState.storage);
+        const matchColor = (filterState.color === 'ALL') || (p.color === filterState.color);
+        const matchSearch = (!searchTxt) || p.name.toLowerCase().includes(searchTxt) || p.brand.toLowerCase().includes(searchTxt);
+
+        return matchCat && matchPrice && matchRAM && matchStorage && matchColor && matchSearch;
+      });
+
+      list.sort((a,b) => {
+        const minA = Math.min(...((a.offers && a.offers.length > 0) ? a.offers.map(o => o.price) : [0]));
+        const minB = Math.min(...((b.offers && b.offers.length > 0) ? b.offers.map(o => o.price) : [0]));
+        if (currentSort === 'cheap_first') return minA - minB;
+        if (currentSort === 'expensive_first') return minB - minA;
+        return 0;
+      });
+
+      document.getElementById('product-total-badge').innerText = `${list.length} thiết bị`;
+      grid.innerHTML = '';
+
+      if (list.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-16 text-center text-slate-400 font-mono text-xs">Không tìm thấy thiết bị nào khớp với tiêu chuẩn lọc. Hãy thử nới lỏng bộ lọc!</div>`;
+        return;
+      }
+
+      list.forEach(p => {
+        const prices = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.price) : [0];
+        const origs = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.orig) : [0];
+        const minP = Math.min(...prices);
+        const maxO = Math.max(...origs);
+        const disc = maxO > minP ? Math.round(((maxO - minP) / maxO) * 100) : 0;
+
+        const card = document.createElement('div');
+        card.className = "bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-md transition flex flex-col justify-between group cursor-pointer";
+        card.onclick = () => openProductDetail(p.id);
+
+        card.innerHTML = `
+          <div>
+            <div class="aspect-[16/11] bg-slate-50 overflow-hidden relative border-b border-slate-100">
+              <img src="${p.image}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+              <span class="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-900 text-white uppercase">${p.brand}</span>
+              ${disc > 0 ? `<span class="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-cps-red text-white">-${disc}%</span>` : ''}
+              
+              <div class="absolute bottom-2 left-2 flex items-center gap-1">
+                ${p.ram !== 'N/A' ? `<span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-900/80 text-white font-mono">${p.ram}</span>` : ''}
+                <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-900/80 text-white font-mono">${p.storage}</span>
+              </div>
+
+              <label onclick="event.stopPropagation()" class="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-slate-900/80 text-white text-[10px] font-mono cursor-pointer">
+                <input type="checkbox" onchange="toggleCompareQueue(${p.id})" ${compareQueue.includes(p.id) ? 'checked' : ''} class="accent-cps-red">
+                <span>So sánh</span>
+              </label>
+            </div>
+
+            <div class="p-3.5">
+              <div class="text-[10px] text-slate-400 font-mono uppercase mb-1">Màu: ${p.color}</div>
+              <h3 class="font-bold text-xs sm:text-sm text-slate-900 leading-snug line-clamp-2 mb-2 group-hover:text-cps-red transition">${p.name}</h3>
+              <div class="pt-2 border-t border-slate-100 flex items-baseline justify-between">
+                <div>
+                  <span class="text-[9px] uppercase font-mono text-slate-400 block font-semibold">Giá rẻ nhất từ</span>
+                  <span class="text-sm sm:text-base font-extrabold text-cps-red font-mono">${formatVND(minP)}</span>
+                </div>
+                ${maxO > minP ? `<span class="text-[11px] line-through text-slate-400 font-mono">${formatVND(maxO)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="p-3.5 pt-0">
+            <button class="w-full py-2 rounded-xl bg-slate-100 group-hover:bg-cps-red group-hover:text-white text-slate-700 text-xs font-bold transition">
+              Xem chi tiết & bài đánh giá
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // ================= CHI TIẾT SẢN PHẨM =================
+    function openProductDetail(id) {
+      const p = TECH_PRODUCTS.find(item => item.id === id);
+      if (!p) return;
+
+      document.getElementById('catalog-view').classList.add('hidden');
+      document.getElementById('product-detail-view').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      document.getElementById('breadcrumb-category').innerText = p.category.toUpperCase();
+      document.getElementById('breadcrumb-name').innerText = p.name;
+      document.getElementById('detail-img').src = p.image;
+      document.getElementById('detail-brand-badge').innerText = p.brand;
+      document.getElementById('detail-title').innerText = p.name;
+      document.getElementById('detail-category-badge').innerText = p.category.toUpperCase();
+
+      const thumbContainer = document.getElementById('detail-thumbnails');
+      thumbContainer.innerHTML = (p.thumbnails || [p.image]).map(imgUrl => `
+        <div onclick="document.getElementById('detail-img').src='${imgUrl}'" class="aspect-square rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:border-cps-red transition bg-slate-50">
+          <img src="${imgUrl}" class="w-full h-full object-cover">
+        </div>
+      `).join('');
+
+      const prices = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.price) : [0];
+      const origs = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.orig) : [0];
+      const minP = Math.min(...prices);
+      const maxO = Math.max(...origs);
+
+      document.getElementById('detail-min-price').innerText = formatVND(minP);
+      document.getElementById('detail-orig-price').innerText = maxO > minP ? formatVND(maxO) : '';
+
+      const sortedOffers = [...(p.offers || [])].sort((a,b) => a.price - b.price);
+      document.getElementById('detail-stores-list').innerHTML = sortedOffers.map((offer, idx) => `
+        <div class="p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${idx === 0 ? 'bg-red-50/70 border-red-200' : 'bg-white border-slate-200'}">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs text-slate-900">${offer.store}</span>
+              ${idx === 0 ? '<span class="px-2 py-0.5 rounded text-[9px] font-black bg-cps-red text-white uppercase">RẺ NHẤT THỊ TRƯỜNG</span>' : ''}
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5">🎁 ${offer.gift}</div>
+          </div>
+          <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+            <span class="text-sm font-extrabold font-mono text-slate-900 block">${formatVND(offer.price)}</span>
+            <a href="${offer.url}" target="_blank" class="px-3.5 py-1.5 rounded-xl ${idx === 0 ? 'bg-cps-red hover:bg-red-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'} text-xs font-bold transition">
+              Đến nơi bán &rarr;
+            </a>
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('detail-pros-cons').innerHTML = `
+        <div class="space-y-1.5">
+          <span class="font-bold text-emerald-600 uppercase font-mono flex items-center gap-1.5">
+            <span>✔</span> ƯU ĐIỂM NỔI BẬT:
+          </span>
+          <ul class="space-y-1 list-disc list-inside text-slate-700">
+            ${(p.pros || []).map(pro => `<li>${pro}</li>`).join('')}
+          </ul>
+        </div>
+        <div class="space-y-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 sm:pl-3 pt-2 sm:pt-0">
+          <span class="font-bold text-amber-600 uppercase font-mono flex items-center gap-1.5">
+            <span>✖</span> CẦN LƯU Ý:
+          </span>
+          <ul class="space-y-1 list-disc list-inside text-slate-700">
+            ${(p.cons || []).map(con => `<li>${con}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+
+      document.getElementById('detail-article-content').innerHTML = p.article || '<p>Bài viết đang cập nhật...</p>';
+
+      const wrapper = document.getElementById('article-wrapper');
+      wrapper.className = "content-collapsed transition-all duration-300";
+      isArticleExpanded = false;
+      document.getElementById('btn-toggle-article').innerHTML = `<span>Đọc tiếp toàn bộ bài đánh giá</span> <span>&darr;</span>`;
+
+      document.getElementById('detail-full-specs-table').innerHTML = Object.entries(p.specs || {}).map(([k,v]) => `
+        <div class="py-2.5 flex justify-between gap-2">
+          <span class="text-slate-400 w-1/3 shrink-0">${k}:</span>
+          <span class="text-slate-800 font-semibold text-right w-2/3">${v}</span>
+        </div>
+      `).join('');
+    }
+
+    function toggleArticleLength() {
+      const wrapper = document.getElementById('article-wrapper');
+      const btn = document.getElementById('btn-toggle-article');
+      
+      if (!isArticleExpanded) {
+        wrapper.className = "transition-all duration-300";
+        btn.innerHTML = `<span>Thu gọn bài đánh giá</span> <span>&uarr;</span>`;
+        isArticleExpanded = true;
+      } else {
+        wrapper.className = "content-collapsed transition-all duration-300";
+        btn.innerHTML = `<span>Đọc tiếp toàn bộ bài đánh giá</span> <span>&darr;</span>`;
+        isArticleExpanded = false;
+        wrapper.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    function showCatalogView() {
+      document.getElementById('product-detail-view').classList.add('hidden');
+      document.getElementById('catalog-view').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderFlashSale() {
+      const container = document.getElementById('flash-sale-container');
+      const items = TECH_PRODUCTS.filter(p => p.is_flash);
+      container.innerHTML = items.map(p => {
+        const prices = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.price) : [0];
+        const origs = (p.offers && p.offers.length > 0) ? p.offers.map(o => o.orig) : [0];
+        const minP = Math.min(...prices);
+        const maxO = Math.max(...origs);
+        const disc = maxO > minP ? Math.round(((maxO - minP) / maxO) * 100) : 0;
+        const soldPct = Math.round((p.sold / p.total) * 100);
+
+        return `
+          <div onclick="openProductDetail(${p.id})" class="bg-white rounded-2xl p-3 text-slate-800 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between group">
+            <div>
+              <div class="aspect-[4/3] rounded-xl overflow-hidden relative bg-slate-50 mb-2 border border-slate-100">
+                <img src="${p.image}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                <span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded text-[10px] font-black bg-cps-red text-white uppercase">-${disc}%</span>
+              </div>
+              <h4 class="font-bold text-xs text-slate-900 leading-snug line-clamp-2 mb-1 group-hover:text-cps-red">${p.name}</h4>
+              <div class="flex items-baseline gap-1 mb-2">
+                <span class="text-sm font-black text-cps-red font-mono">${formatVND(minP)}</span>
+                ${maxO > minP ? `<span class="text-[10px] line-through text-slate-400 font-mono">${formatVND(maxO)}</span>` : ''}
+              </div>
+            </div>
+            <div class="relative w-full h-4 bg-red-100 rounded-full overflow-hidden flex items-center justify-center">
+              <div class="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-red-600 to-amber-500 rounded-full" style="width: ${soldPct}%"></div>
+              <span class="relative z-10 text-[9px] font-bold text-white uppercase tracking-tight">Đã bán ${p.sold}/${p.total}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterCategory(cat) {
+      currentCategory = cat;
+      document.querySelectorAll('aside button').forEach(b => b.classList.remove('bg-red-50', 'text-cps-red', 'font-bold'));
+      const activeBtn = document.querySelector(`aside button[data-cat="${cat}"]`);
+      if (activeBtn) activeBtn.classList.add('bg-red-50', 'text-cps-red', 'font-bold');
+      renderProducts();
+    }
+
+    function changeSortOrder(s) { currentSort = s; renderProducts(); }
+    function handleSearchInput() { showCatalogView(); renderProducts(); }
+
+    function startCountdown() {
+      let h = 2, m = 45, s = 18;
+      setInterval(() => {
+        if (s > 0) s--; else { s = 59; if (m > 0) m--; else { m = 59; if (h > 0) h--; } }
+        document.getElementById('countdown-hours').innerText = h < 10 ? '0' + h : h;
+        document.getElementById('countdown-mins').innerText = m < 10 ? '0' + m : m;
+        document.getElementById('countdown-secs').innerText = s < 10 ? '0' + s : s;
+      }, 1000);
+    }
+
+    function toggleCompareQueue(id) {
+      if (compareQueue.includes(id)) compareQueue = compareQueue.filter(x => x !== id);
+      else {
+        if (compareQueue.length >= 2) return alert("Chỉ so sánh tối đa 2 thiết bị!");
+        compareQueue.push(id);
+      }
+      const btn = document.getElementById('btn-floating-compare');
+      document.getElementById('compare-counter').innerText = compareQueue.length;
+      if (compareQueue.length > 0) btn.classList.remove('hidden'), btn.classList.add('inline-flex');
+      else btn.classList.add('hidden'), btn.classList.remove('inline-flex');
+      renderProducts();
+    }
+
+    function openDirectCompareModal() {
+      if (compareQueue.length < 2) return alert("Vui lòng chọn 2 máy!");
+      const p1 = TECH_PRODUCTS.find(p => p.id === compareQueue[0]);
+      const p2 = TECH_PRODUCTS.find(p => p.id === compareQueue[1]);
+      const min1 = Math.min(...((p1.offers && p1.offers.length > 0) ? p1.offers.map(o => o.price) : [0]));
+      const min2 = Math.min(...((p2.offers && p2.offers.length > 0) ? p2.offers.map(o => o.price) : [0]));
+      const keys = [...new Set([...Object.keys(p1.specs || {}), ...Object.keys(p2.specs || {})])];
+
+      document.getElementById('compare-table-content').innerHTML = `
+        <table class="w-full text-left text-xs font-mono">
+          <thead>
+            <tr class="border-b bg-slate-50">
+              <th class="p-3 text-slate-400">Tiêu chí</th>
+              <th class="p-3 text-slate-900 font-sans font-bold">${p1.name} <div class="text-cps-red font-mono">${formatVND(min1)}</div></th>
+              <th class="p-3 text-slate-900 font-sans font-bold">${p2.name} <div class="text-cps-red font-mono">${formatVND(min2)}</div></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            ${keys.map(k => `
+              <tr>
+                <td class="p-3 text-slate-500 font-semibold">${k}</td>
+                <td class="p-3 text-slate-800">${p1.specs[k] || '---'}</td>
+                <td class="p-3 text-slate-800">${p2.specs[k] || '---'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+      document.getElementById('direct-compare-modal').classList.remove('hidden');
+    }
+    function closeDirectCompareModal() { document.getElementById('direct-compare-modal').classList.add('hidden'); }
+
+    window.addEventListener('DOMContentLoaded', initPage);
+  </script>
+</body>
+</html>
