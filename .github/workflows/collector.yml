@@ -1,0 +1,31 @@
+name: Tech Price Collector Online
+
+on:
+  schedule:
+    # Tự động chạy mỗi 6 tiếng (0:00, 6:00, 12:00, 18:00 UTC)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Cho phép bấm nút "Run workflow" để chạy thủ công bất cứ lúc nào
+
+jobs:
+  collect-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: 2. Thiết lập môi trường Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 3. Cài đặt thư viện cào dữ liệu
+        run: |
+          pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      - name: 4. Chạy Collector đồng bộ lên Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python collector_tech.py
