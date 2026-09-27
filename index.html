@@ -1,0 +1,51 @@
+// Thay thế đoạn TECH_PRODUCTS cố định bằng hàm gọi API Supabase
+const SUPABASE_URL = "https://lleeibzegmnycuingzgx.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZWVpYnplZ21ueWN1aW5nemd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjc5OTUsImV4cCI6MjEwNTcwMzk5NX0.KrO8Y8qoKh0NIPYDL6wki7zGb-Lxi1xwWgQrX9xSXxE";
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let TECH_PRODUCTS = [];
+
+async function fetchOnlineData() {
+  try {
+    const { data, error } = await client
+      .from('tech_products')
+      .select('*, product_offers(*)');
+
+    if (!error && data && data.length > 0) {
+      TECH_PRODUCTS = data.map(item => ({
+        id: item.id,
+        category: item.category,
+        brand: item.brand,
+        name: item.name,
+        ram: item.ram,
+        storage: item.storage,
+        color: item.color,
+        is_flash: item.is_flash,
+        sold: item.sold_count,
+        total: item.total_stock,
+        image: item.image_url,
+        thumbnails: item.thumbnails || [item.image_url],
+        pros: item.pros || [],
+        cons: item.cons || [],
+        article: item.article_html || '',
+        specs: item.specs || {},
+        offers: (item.product_offers || []).map(o => ({
+          store: o.store_name,
+          price: o.price,
+          orig: o.original_price || o.price,
+          gift: o.promotion_gift || 'Chính hãng',
+          url: o.product_url
+        }))
+      }));
+    }
+  } catch (e) {
+    console.error("Lỗi lấy dữ liệu Supabase:", e);
+  }
+}
+
+async function initPage() {
+  await fetchOnlineData();
+  renderFlashSale();
+  renderProducts();
+  startCountdown();
+}
