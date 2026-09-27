@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TechCompare &bull; Đối Soát Giá Toàn Diện & Săn Deal AliExpress / CellphoneS</title>
 
+  <!-- PWA & App Icons -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#d70018">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1041/1041883.png">
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase JS Client v2 -->
@@ -29,10 +36,6 @@
               darkRed: '#a80013',
               lightRed: '#fef2f2',
               gray: '#f4f6f8'
-            },
-            ali: {
-              orange: '#ff4747',
-              yellow: '#ffc107'
             }
           }
         }
@@ -89,7 +92,7 @@
         <input 
           type="text" 
           id="search-input"
-          placeholder="Tìm sản phẩm (Đèn treo màn hình, Củ sạc GaN, Phím cơ Xinmeng, iPhone, RTX...)" 
+          placeholder="Tìm sản phẩm (Baseus, Ugreen, Phím cơ Xinmeng, iPhone, RTX 4070...)" 
           class="w-full bg-white rounded-xl pl-10 pr-4 py-2 text-xs focus:outline-none shadow-sm placeholder:text-slate-400"
           oninput="handleSearchInput()"
         />
@@ -390,7 +393,7 @@
     TechCompare &bull; Nền Tảng Đối Soát Giá Đa Sàn (CellphoneS, AliExpress, Shopee)
   </footer>
 
-  <!-- ================= SCRIPT ================= -->
+  <!-- ================= SCRIPT & SERVICE WORKER REGISTRATION ================= -->
   <script>
     const SUPABASE_URL = "https://lleeibzegmnycuingzgx.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZWVpYnplZ21ueWN1aW5nemd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjc5OTUsImV4cCI6MjEwNTcwMzk5NX0.KrO8Y8qoKh0NIPYDL6wki7zGb-Lxi1xwWgQrX9xSXxE";
@@ -480,7 +483,7 @@
       if (TECH_PRODUCTS.length > 0) openProductDetail(TECH_PRODUCTS[0].id);
     }
 
-    // ================= BỘ LỌC =================
+    // ================= BỘ LỌC ĐA CHIỀU =================
     function setFilter(type, value) {
       filterState[type] = value;
 
@@ -835,6 +838,15 @@
       document.getElementById('direct-compare-modal').classList.remove('hidden');
     }
     function closeDirectCompareModal() { document.getElementById('direct-compare-modal').classList.add('hidden'); }
+
+    // ================= KÍCH HOẠT PWA SERVICE WORKER =================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('PWA Service Worker đã sẵn sàng:', reg.scope))
+          .catch((err) => console.error('Lỗi Service Worker:', err));
+      });
+    }
 
     window.addEventListener('DOMContentLoaded', initPage);
   </script>
